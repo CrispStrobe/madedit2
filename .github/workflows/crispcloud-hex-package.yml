@@ -1,0 +1,55 @@
+name: Embeddable hex package
+
+on:
+  push:
+    branches: [feature/crispcloud-hex-package]
+    paths:
+      - 'packages/madedit2_hex/**'
+      - '.github/workflows/crispcloud-hex-package.yml'
+  pull_request:
+    paths:
+      - 'packages/madedit2_hex/**'
+      - '.github/workflows/crispcloud-hex-package.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: hex-package-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
+env:
+  FLUTTER_VERSION: 3.47.8
+  FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
+
+jobs:
+  test:
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, windows-latest, macos-latest]
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 25
+    steps:
+      - uses: actions/checkout@v5
+        with:
+          persist-credentials: false
+      - uses: subosito/flutter-action@v2
+        with:
+          channel: stable
+          flutter-version: ${{ env.FLUTTER_VERSION }}
+          cache: true
+      - name: Resolve the standalone package, not the desktop app
+        working-directory: packages/madedit2_hex
+        run: flutter pub get
+      - name: Analyze public package
+        working-directory: packages/madedit2_hex
+        run: flutter analyze --no-fatal-infos
+      - name: Test byte accuracy, snapshots, history and widget input
+        working-directory: packages/madedit2_hex
+        run: flutter test --reporter expanded
+      - name: Test browser compatibility
+        if: runner.os == 'Linux'
+        working-directory: packages/madedit2_hex
+        run: flutter test --platform=chrome --reporter expanded
