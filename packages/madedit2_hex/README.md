@@ -52,9 +52,13 @@ account identity, input size limits and unsaved-close confirmation.
 
 ## Limits and validation
 
-Undo is capped by edit count (default 500), and each inserted operation is
-capped at 16 MiB. This is not a total retained-memory budget. Rendering caches
-at most eight 64 KiB pages; search is chunked and patterns are capped at 1 MiB.
+Undo and redo share an edit-count cap (default 500) and a 64 MiB inserted-byte
+budget (`maxUndoBytes`). Shared buffers count once, including the full buffer
+when history retains only a slice. Original-source ranges use no byte budget.
+Current content and caller-held snapshots can retain additional memory; this
+is a history limit, not a limit on the whole process. Each inserted operation
+is capped at 16 MiB. Rendering caches at most eight 64 KiB pages; search is
+chunked and patterns are capped at 1 MiB.
 Browser clipboard permissions and physical-device accessibility/IME behavior
 must be validated by the embedding application. Large-file throughput and
 save durability are also properties of the host backend, not just this widget.
