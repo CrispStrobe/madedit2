@@ -1,0 +1,116 @@
+name: Embeddable hex package
+
+on:
+  push:
+    branches: [feature/crispcloud-hex-package]
+  pull_request:
+    paths:
+      - 'packages/madedit2_hex/**'
+      - '.github/workflows/crispcloud-hex-package.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: hex-package-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: false
+
+env:
+  FLUTTER_VERSION: 3.47.8
+  FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
+
+jobs:
+  prepare:
+    # One-time import, restricted to the explicitly requested fork feature branch.
+    # Pull requests never receive a write token or run this import step.
+    if: github.repository == 'CrispStrobe/madedit2' && github.event_name != 'pull_request' && github.ref == 'refs/heads/feature/crispcloud-hex-package'
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    permissions:
+      contents: write
+    outputs:
+      revision: ${{ steps.import.outputs.revision }}
+    steps:
+      - uses: actions/checkout@v5
+        with:
+          ref: ${{ github.sha }}
+          persist-credentials: true
+      - name: Import exact existing package checkpoint once
+        id: import
+        shell: bash
+        run: |
+          set -euo pipefail
+          if [[ ! -f packages/madedit2_hex/lib/madedit2_hex.dart ]]; then
+            source_revision=bf12c3ac97526d2fd33a70b38148fa86c097db47
+            git fetch --no-tags --depth=1 https://github.com/CrispStrobe/CrispCloud.git "$source_revision"
+            test "$(git rev-parse FETCH_HEAD)" = "$source_revision"
+            git restore --source=FETCH_HEAD --staged --worktree -- packages/madedit2_hex
+            cat > packages/madedit2_hex/UPSTREAM.md <<'EOF'
+          # Native hex package provenance
+
+          Maintained repository: https://github.com/CrispStrobe/madedit2
+          Branch: feature/crispcloud-hex-package
+          Package path: packages/madedit2_hex
+
+          Upstream: https://github.com/madedit/madedit2
+          Upstream revision: 288d35747faccb1cb997c4a30afc40c6cb48b0ae (v1.0.2), MIT.
+          The original copyright and permission notice are retained in LICENSE.
+
+          Initial package imported without implementation changes from
+          CrispStrobe/CrispCloud at bf12c3ac97526d2fd33a70b38148fa86c097db47.
+          This preserves the existing integration work, rather than restarting it.
+
+          lib/hex_layout.dart adapts the byte-column layout, offset and nibble
+          helpers from upstream lib/editor/hex_view.dart. The embeddable widget,
+          serialized controller and persistent byte-only AVL document are new
+          integration code, not an unchanged upstream widget. The storage adapter
+          stays in CrispCloud, where account identity and save policy belong.
+
+          This package deliberately omits text newline indexing, encoding-aligned
+          byte mutations, global application settings, Rust, scripting and
+          Tree-sitter. The complete MadEdit2 application remains separate.
+
+          Consumers should pin an immutable commit and the package subdirectory,
+          rather than depending on a moving branch. No changes are merged to main
+          by this import or its validation workflow.
+          EOF
+            git add -- packages/madedit2_hex
+            git -c user.name='github-actions[bot]' -c user.email='41898282+github-actions[bot]@users.noreply.github.com' commit -m 'feat(hex): preserve reusable editor and tests in maintained MadEdit2 fork'
+            # Never force-push: concurrent work must not be overwritten.
+            git push origin HEAD:refs/heads/feature/crispcloud-hex-package
+          fi
+          echo "revision=$(git rev-parse HEAD)" >> "$GITHUB_OUTPUT"
+
+  test:
+    needs: prepare
+    if: always() && (needs.prepare.result == 'success' || needs.prepare.result == 'skipped')
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, windows-latest, macos-14]
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 25
+    steps:
+      - uses: actions/checkout@v5
+        with:
+          ref: ${{ needs.prepare.outputs.revision || github.sha }}
+          persist-credentials: false
+      - uses: subosito/flutter-action@v2
+        with:
+          channel: stable
+          flutter-version: ${{ env.FLUTTER_VERSION }}
+          cache: true
+      - name: Resolve the standalone package, not the desktop app
+        working-directory: packages/madedit2_hex
+        run: flutter pub get
+      - name: Analyze public package
+        working-directory: packages/madedit2_hex
+        run: flutter analyze --no-fatal-infos
+      - name: Test byte accuracy, snapshots, history and widget input
+        working-directory: packages/madedit2_hex
+        run: flutter test --reporter expanded
+      - name: Test browser compatibility
+        if: runner.os == 'Linux'
+        working-directory: packages/madedit2_hex
+        run: flutter test --platform=chrome --reporter expanded
