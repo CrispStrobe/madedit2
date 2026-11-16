@@ -1,0 +1,16 @@
+{
+  "qualified_package_commit": "912b1f7527e5f48793a8e0834cc7c7ab8dbb7f5f",
+  "all_12_package_blobs_match_vendored_source": true,
+  "executed_package_suite_files": [
+    "hex_core_regression_test.dart",
+    "hex_document_test.dart",
+    "hex_regression_test.dart",
+    "hex_ui_regression_test.dart"
+  ],
+  "combined_host_passed": 169,
+  "combined_host_failed": 0,
+  "scope": "All four package test files executed through the real CrispCloud production dependency graph, alongside Office/ODS and Zotero tests. The combined count includes those other tests and is not a hex-only count.",
+  "flutter": "3.47.8",
+  "dart": "3.13.7",
+  "github_actions_queried_or_awaited": false
+}
